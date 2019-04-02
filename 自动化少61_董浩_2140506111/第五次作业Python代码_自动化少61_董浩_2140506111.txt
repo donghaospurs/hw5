@@ -1,0 +1,260 @@
+'''频域低通滤波器：设计低通滤波器包括 butterworth and Gaussian (选择合适的半径，计算功率谱比),
+平滑测试图像test1和2;分析各自优缺点；'''
+
+import cv2
+import math
+import numpy as np
+import matplotlib.pyplot as plt
+
+test = cv2.imread("./test1.pgm", 0)
+# test = cv2.imread("./test2.tif", 0)
+test_c1 = test.copy()
+test_c2 = test.copy()
+width = test.shape[0]
+height = test.shape[1]
+test_l = np.zeros((2*width, 2*height), np.int)
+test_l_g = np.zeros((2*width, 2*height), np.int)
+test_l_b = np.zeros((2*width, 2*height), np.int)
+test_l_G = np.zeros((2*width, 2*height), dtype=np.complex128)
+test_l_B = np.zeros((2*width, 2*height), dtype=np.complex128)
+test_extend = cv2.copyMakeBorder(test, 0, width, 0, height, cv2.BORDER_CONSTANT, value=[0, 0, 0])
+
+D0 = 60
+
+for i in range(0, width):
+    for j in range(0, height):
+        if (i + j) % 2 == 1:
+            test_l[i, j] = -1 * test_extend[i, j]
+        else:
+            test_l[i, j] = test_extend[i, j]
+
+test_l_F = np.fft.fft2(test_l)
+
+
+def cal_energy(img):
+    energy = 0
+    for i in range(0, img.shape[0]):
+        for j in range(0, img.shape[1]):
+            energy = energy + abs(img[i, j])**2
+    return energy
+
+def gause_lp_H(u, v):
+    return math.exp(((u - width)*(u - width)+(v - height)*(v - height))*(-1)/2/D0/D0)
+
+
+def butterworth_lp_H(u, v):
+    D_uv_2 = (u - width)*(u - width)+(v - height)*(v - height)
+    return 1/(1+D_uv_2*D_uv_2/D0/D0/D0/D0)
+
+
+for i in range(0, 2*width):
+    for j in range(0, 2*height):
+        test_l_G[i, j] = test_l_F[i, j] * gause_lp_H(i, j)
+        test_l_B[i, j] = test_l_F[i, j] * butterworth_lp_H(i, j)
+
+test_l_G_IF = np.fft.ifft2(test_l_G)
+test_l_G_IF_real = test_l_G_IF.real
+test_l_B_IF = np.fft.ifft2(test_l_B)
+test_l_B_IF_real = test_l_B_IF.real
+
+for i in range(0, 2*width):
+    for j in range(0, 2*height):
+        if (i + j) % 2 == 1:
+            test_l_g[i, j] = -1 * test_l_G_IF_real[i, j]
+            test_l_b[i, j] = -1 * test_l_B_IF_real[i, j]
+        else:
+            test_l_g[i, j] = test_l_G_IF_real[i, j]
+            test_l_b[i, j] = test_l_B_IF_real[i, j]
+
+for i in range(0, width):
+    for j in range(0, height):
+        test_c1[i, j] = test_l_g[i, j]
+        test_c2[i, j] = test_l_b[i, j]
+
+'''plt.subplot(221)
+plt.imshow(abs(test_l_F))
+plt.title('fft')
+plt.subplot(222)
+plt.imshow(abs(test_l_G))
+plt.title('G')
+plt.subplot(223)
+plt.imshow(abs(test_l_B))
+plt.title('B')
+plt.show()'''
+
+g_l = cal_energy(test_c1)/cal_energy(test)
+b_l = cal_energy(test_c2)/cal_energy(test)
+
+print('gl:', g_l)
+print('bl', b_l)
+cv2.imshow('test_g_l', test_c1)
+cv2.imshow('test_b_l', test_c2)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
+
+'''频域高通滤波器：设计高通滤波器包括butterworth and Gaussian，在频域增强边缘。
+选择半径和计算功率谱比，测试图像test3,4：分析各自优缺点；'''
+
+import cv2
+import math
+import numpy as np
+
+test = cv2.imread("./test4.tif", 0)
+# test = cv2.imread("./test3_corrupt.pgm", 0)
+test_c3 = test.copy()
+test_c4 = test.copy()
+width = test.shape[0]
+height = test.shape[1]
+test_l = np.zeros((2*width, 2*height), np.int)
+test_h_g = np.zeros((2*width, 2*height), np.int)
+test_h_b = np.zeros((2*width, 2*height), np.int)
+test_h_G = np.zeros((2*width, 2*height), dtype=np.complex128)
+test_h_B = np.zeros((2*width, 2*height), dtype=np.complex128)
+test_extend = cv2.copyMakeBorder(test, 0, width, 0, height, cv2.BORDER_CONSTANT, value=[0, 0, 0])
+
+D0 = 160
+
+for i in range(0, width):
+    for j in range(0, height):
+        if (i + j) % 2 == 1:
+            test_l[i, j] = -1 * test_extend[i, j]
+        else:
+            test_l[i, j] = test_extend[i, j]
+
+test_l_F = np.fft.fft2(test_l)
+
+
+def cal_energy(img):
+    energy = 0
+    for i in range(0, img.shape[0]):
+        for j in range(0, img.shape[1]):
+            energy = energy + abs(img[i, j])**2
+    return energy
+
+
+def gause_lp_H(u, v):
+    return math.exp(((u - width)*(u - width)+(v - height)*(v - height))*(-1)/2/D0/D0)
+
+
+def gause_hp_H(u, v):
+    return 1-gause_lp_H(u, v)
+
+
+def butterworth_hp_H(u, v):
+    D_uv_2 = (u - width)*(u - width)+(v - height)*(v - height)
+    if D_uv_2 != 0:
+        return 1/(1+D0*D0*D0*D0/D_uv_2/D_uv_2)
+    else:
+        return 0
+
+for i in range(0, 2*width):
+    for j in range(0, 2*height):
+        test_h_G[i, j] = test_l_F[i, j] * gause_hp_H(i, j)
+        test_h_B[i, j] = test_l_F[i, j] * butterworth_hp_H(i, j)
+
+test_h_G_IF = np.fft.ifft2(test_h_G)
+test_h_G_IF_real = test_h_G_IF.real
+test_h_B_IF = np.fft.ifft2(test_h_B)
+test_h_B_IF_real = test_h_B_IF.real
+
+for i in range(0, 2*width):
+    for j in range(0, 2*height):
+        if (i + j) % 2 == 1:
+            test_h_g[i, j] = -1 * test_h_G_IF_real[i, j]
+            test_h_b[i, j] = -1 * test_h_B_IF_real[i, j]
+        else:
+            test_h_g[i, j] = test_h_G_IF_real[i, j]
+            test_h_b[i, j] = test_h_B_IF_real[i, j]
+
+for i in range(0, width):
+    for j in range(0, height):
+        test_c3[i, j] = test_h_g[i, j]
+        test_c4[i, j] = test_h_b[i, j]
+
+g_l = cal_energy(test_c3)/cal_energy(test)
+b_l = cal_energy(test_c4)/cal_energy(test)
+
+print('gl:', g_l)
+print('bl', b_l)
+
+cv2.imshow('test_g_h', test_c3)
+cv2.imshow('test_b_h', test_c4)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
+
+'''其他高通滤波器：拉普拉斯和Unmask，对测试图像test3,4滤波；分析各自优缺点；'''
+
+import cv2
+import math
+import numpy as np
+
+# test = cv2.imread("./test4.tif", 0)
+test = cv2.imread("./test3_corrupt.pgm", 0)
+test_c3 = test.copy()
+test_c4 = test.copy()
+width = test.shape[0]
+height = test.shape[1]
+test_l = np.zeros((2*width, 2*height), np.int)
+test_h_b = np.zeros((2*width, 2*height), np.float32)
+test_h_B = np.zeros((2*width, 2*height), dtype=np.complex128)
+test_h_u = np.zeros((2*width, 2*height), np.float32)
+test_h_U = np.zeros((2*width, 2*height), dtype=np.complex128)
+test_extend = cv2.copyMakeBorder(test, 0, width, 0, height, cv2.BORDER_CONSTANT, value=[0, 0, 0])
+
+for i in range(0, 2*width):
+    for j in range(0, 2*height):
+        if (i + j) % 2 == 1:
+            test_l[i, j] = -1 * test_extend[i, j]
+        else:
+            test_l[i, j] = test_extend[i, j]
+
+test_l_F = np.fft.fft2(test_l)
+
+
+def laplace_hp_H(u, v):
+    D_uv_2 = (u - width) * (u - width) + (v - height) * (v - height)
+    return 1 + 4 * math.pi * math.pi * D_uv_2
+
+
+def unmask_hp_H(u, v):
+    return 0.5+0.75*laplace_hp_H(u, v)
+
+for i in range(0, 2*width):
+    for j in range(0, 2*height):
+        test_h_B[i, j] = test_l_F[i, j] * laplace_hp_H(i, j)
+        test_h_U[i, j] = test_l_F[i, j] * unmask_hp_H(i, j)
+
+test_h_B_IF = np.fft.ifft2(test_h_B)
+test_h_B_IF_real = test_h_B_IF.real
+test_h_U_IF = np.fft.ifft2(test_h_U)
+test_h_U_IF_real = test_h_U_IF.real
+
+for i in range(0, 2*width):
+    for j in range(0, 2*height):
+        if (i + j) % 2 == 1:
+            test_h_b[i, j] = -1 * test_h_B_IF_real[i, j]
+            test_h_u[i, j] = -1 * test_h_U_IF_real[i, j]
+        else:
+            test_h_b[i, j] = test_h_B_IF_real[i, j]
+            test_h_u[i, j] = test_h_U_IF_real[i, j]
+
+test_h_min = test_h_b.min()
+test_h_m = test_h_b.max()-test_h_min
+test_h_min_u = test_h_u.min()
+test_h_m_u = test_h_u.max()-test_h_min_u
+
+for i in range(0, width):
+    for j in range(0, height):
+        test_h_b[i, j] = test_h_b[i, j] - test_h_min
+        test_h_b[i, j] = int(test_h_b[i, j] * 255 / test_h_m)
+        test_c3[i, j] = test_h_b[i, j]
+        test_h_u[i, j] = test_h_u[i, j] - test_h_min_u
+        test_h_u[i, j] = int(test_h_u[i, j] * 255 / test_h_m_u)
+        test_c4[i, j] = test_h_u[i, j]
+
+cv2.imshow('test_l_h', test_c3)
+cv2.imshow('test_u_h', test_c4)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
